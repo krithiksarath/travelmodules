@@ -1,6 +1,0 @@
-https://search-propertiesregion-6d2x5efxjkcyu5ccn22eepluxu.ap-southeast-1.es.amazonaws.com
-
-https://search-propertiesregion-6d2x5efxjkcyu5ccn22eepluxu.ap-southeast-1.es.amazonaws.com/_plugin/kibana/
-
-propertiesregion
-
