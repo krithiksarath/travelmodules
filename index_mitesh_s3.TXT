@@ -1,0 +1,215 @@
+var Request = require("request");
+var alasql = require("alasql");
+var replaceall = require("replaceall");
+var mjson = require("merge-json");
+var aws = require('aws-sdk');
+var moment = require('moment');
+var lodash =require('lodash');
+
+async function retrieveJSONFromS3(s3Params){
+    return new Promise((resolve,reject) => {
+        console.log("S3 parameters : " + JSON.stringify(s3Params));
+        var s3 = new aws.S3();
+        s3.getObject(s3Params, function (err, data) {
+            if (err) {
+                console.log(err);
+                reject("Unable to retrieve the S3 file : " + s3Params);
+            } 
+            
+            let jsonData = JSON.parse(data.Body.toString());
+
+            resolve(jsonData);
+        });
+
+    });
+}
+
+
+async function retrieveWeatherDataFromAPI(apiUrl){
+    return new Promise((resolve,reject) => {
+
+        console.log(apiUrl);
+        var merged=[];
+        Request.get(apiUrl, (error, response, body) => {
+
+            if(error) {
+                console.log(error);
+                reject('Error occured while retrieving weather api data. check logs');
+            }
+            var parsedData = JSON.parse(body);
+
+            for(var i=0;i<parsedData.items.length;i++){
+                var temp = JSON.stringify(parsedData.items[i].readings);
+                temp = replaceall("value","counter",temp);
+                merged = mjson.merge(merged,JSON.parse(temp));
+            }
+
+            let res=[];
+
+            if(parsedData.items.length != 0){
+                    res = alasql('SELECT station_id, ROUND(SUM(counter),2) AS counter FROM ? GROUP BY station_id',[merged]);
+                    //console.log(JSON.stringify(res));
+                    console.log("Processed record count : " + parsedData.items.length);
+            }else{
+                console.log("There are no items to process");
+            }
+
+            resolve(res);
+        });
+        console.log("done");
+    });
+}
+
+
+async function uploadResultToS3(weatherData,areaNames,bucketName,runDate){
+    return new Promise((resolve,reject) => {
+        modres = alasql("SELECT  A.station_id, A.counter, B.area from ? A  join ? B on A.station_id = B.device_id",[ weatherData,areaNames]);
+        var s3 = new aws.S3();
+
+        var putParams = {
+            Bucket: "rainy-days-app",
+            Key: "rain-data/"+bucketName+"/"+runDate+".json",
+            Body: JSON.stringify(modres)
+        };
+
+        s3.putObject(putParams, function(err,data){
+            if(err){
+                console.log(error);
+                reject("Error occured in uploading to S3 bucket. Check Logs")
+            }else{
+                console.log("Upload is successful");
+                resolve("Finished with NO errors for RunDate - " + runDate);
+            }
+        });
+    });
+}
+
+
+
+async function getRunDate(customDate){
+    let monthArr = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var m;
+
+    var year, month, date;
+
+    if(customDate === ""){
+        m = moment().utcOffset(+480).add(-1,'days');
+    }else{
+        m = moment(new Date(customDate));
+    }
+    return m;
+}
+
+
+exports.WeatherDataCollection =  async(event) => {
+    console.log("Event received   --  " + JSON.stringify(event));
+    console.log("Starting function");
+
+    let momentObj = await getRunDate(event.hasOwnProperty("rundate") ? event.rundate : "");
+    var runDate = momentObj.format('YYYY-MM-DD');
+    var month = momentObj.get("month")+1 > 9 ? momentObj.get("month")+1 : "0"+(momentObj.get("month")+1);
+    var bucketName = momentObj.get("year") + "-" + month;
+
+    console.log("Bucketname set to : "+ bucketName);
+
+    var res=[];
+    //var runDate = "2017-12-31";
+    //var runDate = moment().utcOffset(+480).add(-1,'days').format("YYYY-MM-DD");   //  480 added for UTC -> SG Time conversion
+    //var runDate = moment().utcOffset(+480).format("YYYY-MM-DD hh:mm:ss");
+
+    console.log("Service started for RunDate - "+ runDate);
+    var url = "https://api.data.gov.sg/v1/environment/rainfall?date="+runDate;
+
+    console.log('calling retrieveWeatherDataFromAPI');
+    let weatherData = await retrieveWeatherDataFromAPI(url);
+    console.log('calling retrieveJSONFromS3');
+    let areaNames = await retrieveJSONFromS3({Bucket: "rainy-days-app", Key: "rain-data/sg-areacode-name-reference.json"});
+    console.log('calling uploadResultToS3');
+    let uploadResult = await uploadResultToS3(weatherData,areaNames,bucketName,runDate);
+    
+
+    console.log("Processing complete. Uploading of data starts");
+
+    return uploadResult;
+
+}
+
+async function getAllKeys(params){
+    return new Promise((resolve, reject) => {
+    var s3 = new aws.S3();
+    var out=[];
+    s3.listObjectsV2(params).promise()
+        .then(({Contents, IsTruncated, NextContinuationToken}) => {
+        out.push(...Contents);
+        !IsTruncated ? resolve(out) : resolve(listAllKeys(Object.assign(params, {ContinuationToken: NextContinuationToken}), out));
+        })
+        .catch(reject);
+    });
+}
+
+
+async function dataMassageForTable(weatherStats, monthlyData) {
+      let resultingTableData = weatherStats.map(function(loc) {
+        let result = {
+          area: loc.area,
+          readings: monthlyData.map(function(reading) {
+            let findAreaObject = lodash._.find(reading.readings, {area: loc.area});
+            let res = {
+              date: reading.timestamp,
+              counter: findAreaObject ? findAreaObject.counter: -1 // minus one means: 'no data from API'
+            };
+            return res;
+          })
+        };
+        result.rainyDays = lodash._.filter(result.readings, (o) => {
+            return o.counter > 0
+          })
+          .length
+        ;
+        return result;
+      });
+      let finalResult = lodash._.filter(resultingTableData, (o) => o.area);
+      return lodash._.sortBy(finalResult, ['area']);
+}
+
+
+async function consolidateMonthlyData(newKeys,prefix){
+    var completeData = [];
+    for(var i=0;i<newKeys.length;i++){
+        if(newKeys[i].Key.toString().indexOf(".json") < 0)
+            continue;
+        let fileKey = newKeys[i].Key;
+        console.log("Executing for Key = "+ fileKey);
+        let dailyData = await retrieveJSONFromS3({Bucket: "rainy-days-app", Key: fileKey});    
+        var temp ={};
+        temp.timestamp = fileKey.replace(".json","").replace(prefix,"");
+        temp.readings = dailyData;
+        temp = JSON.stringify(temp);
+        completeData.push(JSON.parse(temp));
+        //completeData = mjson.merge(completeData,JSON.parse(temp));
+    }
+    return completeData;
+}
+
+exports.GetMonthlyData  = async(event)=>{
+    var monthparam = event.month;
+    console.log("Month parameter passed =  " + monthparam);
+    
+    var prefixStr = "rain-data/"+monthparam+"/";
+    let allKeys = await getAllKeys({Bucket: "rainy-days-app",Prefix: prefixStr});
+    let newKeys = JSON.parse(JSON.stringify(allKeys));
+    //let cumulativeData = await retrieveAllMonthlyDataFromS3(newKeys,prefixStr);
+    let cumulativeData = await consolidateMonthlyData(newKeys, prefixStr);
+    let areacode = await retrieveJSONFromS3({Bucket: "rainy-days-app", Key: "rain-data/sg-areacode-name-reference.json"}); 
+    let finalData = await dataMassageForTable(areacode,cumulativeData);
+    console.log("Processing over");
+
+    return finalData;
+
+    // return {
+    //     'statusCode': 200,
+    //     'headers': { 'Content-Type': 'application/json' },
+    //     'body': JSON.stringify(finalData)
+    // };
+    //return finalData;
+}
