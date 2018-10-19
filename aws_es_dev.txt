@@ -9,3 +9,9 @@ traveldata
 https://search-traveldata-76dao6codcwaoonrt2n3ui4gwq.ap-southeast-1.es.amazonaws.com
 
 https://search-traveldata-76dao6codcwaoonrt2n3ui4gwq.ap-southeast-1.es.amazonaws.com/_plugin/kibana/
+
+traveldatanew
+
+https://search-traveldatanew-wwv7gpaidpoorko2zgr4tnafiq.ap-southeast-1.es.amazonaws.com
+
+https://search-traveldatanew-wwv7gpaidpoorko2zgr4tnafiq.ap-southeast-1.es.amazonaws.com/_plugin/kibana/
