@@ -1,0 +1,5 @@
+autocompletedata
+
+https://search-autocompletedata-gj7sxmdc3orsrbvsadr64wri2m.ap-southeast-1.es.amazonaws.com
+
+https://search-autocompletedata-gj7sxmdc3orsrbvsadr64wri2m.ap-southeast-1.es.amazonaws.com/_plugin/kibana/
