@@ -1,0 +1,81 @@
+{
+	"info": {
+		"_postman_id": "ef4e7aa8-cc11-4fdb-9177-065e6a28ecd6",
+		"name": "iCOMM",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "generate iCOMM access token",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Basic ZWU1NzgwNjUtZWVmOC00ZjViLTgyYWYtZDUxMmFiMjRjNjkxOmYwYjNmYzlkLTJmMWUtNDIyZS04MWQ5LTI1NmU1YmVjOTRkYgo=",
+						"type": "text"
+					}
+				],
+				"body": {},
+				"url": {
+					"raw": "uaa.dev.apps.cs.sgp.dbs.com/oauth/token?grant_type=client_credentials",
+					"host": [
+						"uaa",
+						"dev",
+						"apps",
+						"cs",
+						"sgp",
+						"dbs",
+						"com"
+					],
+					"path": [
+						"oauth",
+						"token"
+					],
+					"query": [
+						{
+							"key": "grant_type",
+							"value": "client_credentials"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "send Email",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "clientId",
+						"value": "ee578065-eef8-4f5b-82af-d512ab24c691",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer xxx",
+						"type": "text"
+					},
+					{
+						"key": "uuid",
+						"value": "2345643564356432535",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"idType\": \"string\",\n  \"id\": \"string\",\n  \"messageTemplateId\": \"string\",\n  \"fieldDetl\": [\n    {\n      \"fieldName\": \"string\",\n      \"fieldValue\": \"string\"\n    }\n  ]\n}"
+				},
+				"url": "https://x01bcapigw1a.uat.dbs.com:10443/api/sg/v1/utilities/internal/notification"
+			},
+			"response": []
+		}
+	]
+}
